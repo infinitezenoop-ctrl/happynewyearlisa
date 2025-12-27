@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Win for a Surprise</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@500&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #ffe6eb; /* Soft pastel background */
+            font-family: 'Quicksand', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        h1 {
+            font-family: 'Pacifico', cursive;
+            color: #ff1493;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 0px #fff;
+        }
+
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 10px 20px rgba(255, 105, 180, 0.3);
+            border: 5px solid #ffb7c5;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #ffcce0, #ffe6eb);
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none; /* Let clicks pass through to canvas */
+        }
+
+        .message {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid #ff69b4;
+            pointer-events: auto; /* Re-enable clicks for buttons */
+        }
+
+        h2 { color: #ff1493; margin: 0 0 10px 0; }
+        p { color: #555; font-size: 1.1rem; }
+        
+        button {
+            background: #ff69b4;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-family: 'Quicksand', sans-serif;
+            font-weight: bold;
+            margin-top: 15px;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.1);
+            background: #ff1493;
+        }
+
+        #scoreBoard {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Pacifico', cursive;
+            font-size: 3rem;
+            color: white;
+            text-shadow: 2px 2px 0px #ff69b4;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Win for a Surprise! 🩷</h1>
+    
+    <div id="gameContainer">
+        <div id="scoreBoard">0</div>
+        <canvas id="gameCanvas" width="320" height="480"></canvas>
+        
+        <div id="ui-layer">
+            <div id="startScreen" class="message">
+                <h2>Ready?</h2>
+                <p>Tap, Click, or Spacebar to fly!</p>
+                <p><strong>Reach Score: 5</strong></p>
+                <button onclick="startGame()">Start Game</button>
+            </div>
+
+            <div id="gameOverScreen" class="message" style="display: none;">
+                <h2>Oops!</h2>
+                <p>Don't give up!</p>
+                <button onclick="resetGame()">Try Again</button>
+            </div>
+
+            <div id="winScreen" class="message" style="display: none;">
+                <h2>You Won! 💖</h2>
+                <p>Here is your surprise...</p>
+                <button onclick="claimPrize()">Open It!</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        // PASTE YOUR LINK HERE:https://tinyurl.com/happynewyearlisa
+        const SURPRISE_LINK = "https://tinyurl.com/happynewyearlisa"; 
+        
+        // How many pipes to pass to win?
+        const WINNING_SCORE = 5; 
+        // ---------------------
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('scoreBoard');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const winScreen = document.getElementById('winScreen');
+
+        // Game Variables
+        let frames = 0;
+        let score = 0;
+        let gameState = 'START'; // START, PLAYING, GAMEOVER, WIN
+        let speed = 2; // Speed of the pipes
+
+        // Bird Object
+        const bird = {
+            x: 50,
+            y: 150,
+            w: 25,
+            h: 25,
+            radius: 12,
+            velocity: 0,
+            gravity: 0.25,
+            jump: 4.6,
+            
+            draw: function() {
+                // Body
+                ctx.fillStyle = '#ff1493'; // Deep Pink
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Wing
+                ctx.fillStyle = '#ff69b4'; // Hot Pink
+                ctx.beginPath();
+                ctx.arc(this.x - 5, this.y + 2, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eye
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(this.x + 6, this.y - 4, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(this.x + 8, this.y - 4, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Beak
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.moveTo(this.x + 10, this.y);
+                ctx.lineTo(this.x + 18, this.y + 3);
+                ctx.lineTo(this.x + 10, this.y + 6);
+                ctx.fill();
+            },
+            
+            update: function() {
+                this.velocity += this.gravity;
+                this.y += this.velocity;
+
+                // Floor Collision
+                if(this.y + this.radius >= canvas.height) {
+                    this.y = canvas.height - this.radius;
+                    gameOver();
+                }
+            },
+            
+            flap: function() {
+                this.velocity = -this.jump;
+            }
+        };
+
+        // Pipes Array
+        const pipes = {
+            position: [],
+            top: { sX: 553, sY: 0 },
+            bottom: { sX: 502, sY: 0 },
+            w: 53,
+            h: 400,
+            gap: 120, // Space between pipes
+            dx: 2,
+            
+            draw: function() {
+                for(let i = 0; i < this.position.length; i++) {
+                    let p = this.position[i];
+                    let topY = p.y;
+                    let bottomY = p.y + this.h + this.gap;
+                    
+                    // Draw Pipes (Simple Rectangles for clearer customization)
+                    ctx.fillStyle = '#ffb7c5'; // Pastel Pink
+                    ctx.fillRect(p.x, topY, this.w, this.h); // Top Pipe
+                    ctx.fillRect(p.x, bottomY, this.w, this.h); // Bottom Pipe
+                    
+                    // Pipe borders to make them pop
+                    ctx.strokeStyle = '#ff69b4';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(p.x, topY, this.w, this.h);
+                    ctx.strokeRect(p.x, bottomY, this.w, this.h);
+                }
+            },
+            
+            update: function() {
+                // Add new pipe every 120 frames
+                if(frames % 120 == 0) {
+                    this.position.push({
+                        x: canvas.width,
+                        y: -250 * (Math.min(Math.random() + 1, 1.8)) + 150
+                    });
+                }
+                
+                for(let i = 0; i < this.position.length; i++) {
+                    let p = this.position[i];
+                    p.x -= this.dx;
+                    
+                    // Collision Logic
+                    let bottomPipeY = p.y + this.h + this.gap;
+                    
+                    // Collision with pipes
+                    if(bird.x + bird.radius > p.x && 
+                       bird.x - bird.radius < p.x + this.w && 
+                       (bird.y - bird.radius < p.y + this.h || 
+                        bird.y + bird.radius > bottomPipeY)) {
+                        gameOver();
+                    }
+                    
+                    // Remove pipes that went off screen
+                    if(p.x + this.w <= 0) {
+                        this.position.shift();
+                        score++;
+                        scoreEl.innerHTML = score;
+                        // Score Sound could go here
+
+                        // CHECK WIN CONDITION
+                        if(score >= WINNING_SCORE) {
+                            gameWin();
+                        }
+                    }
+                }
+            },
+
+            reset: function() {
+                this.position = [];
+            }
+        };
+
+        // Loops
+        function loop() {
+            if (gameState === 'PLAYING') {
+                update();
+                draw();
+                frames++;
+                requestAnimationFrame(loop);
+            }
+        }
+
+        function update() {
+            bird.update();
+            pipes.update();
+        }
+
+        function draw() {
+            // Clear Canvas
+            ctx.fillStyle = '#fff0f5'; // Lavender Blush background inside canvas
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            pipes.draw();
+            bird.draw();
+        }
+
+        // Controls
+        function startGame() {
+            gameState = 'PLAYING';
+            startScreen.style.display = 'none';
+            loop();
+        }
+
+        function resetGame() {
+            bird.y = 150;
+            bird.velocity = 0;
+            pipes.reset();
+            score = 0;
+            frames = 0;
+            scoreEl.innerHTML = score;
+            gameOverScreen.style.display = 'none';
+            gameState = 'PLAYING';
+            loop();
+        }
+
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            gameOverScreen.style.display = 'block';
+        }
+
+        function gameWin() {
+            gameState = 'WIN';
+            winScreen.style.display = 'block';
+            
+            // Try to open automatically, but browsers often block this
+            // That's why we also have the button in the UI
+            // window.open(SURPRISE_LINK, '_blank'); 
+        }
+
+        function claimPrize() {
+            window.location.href = SURPRISE_LINK;
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', function(e) {
+            if(e.code === 'Space') {
+                if(gameState === 'PLAYING') bird.flap();
+            }
+        });
+
+        canvas.addEventListener('click', function() {
+            if(gameState === 'PLAYING') bird.flap();
+        });
+        
+        // Prevent scrolling on mobile when tapping
+        document.body.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+
+        // Initial Draw
+        bird.draw();
+
+    </script>
+</body>
+</html>
